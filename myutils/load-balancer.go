@@ -10,6 +10,12 @@ import (
 	"net/url"
 )
 
+var backendServers = []string{
+	"http://localhost:8081",
+	"http://localhost:8082",
+}
+var nextServerIndex = 0
+
 func home(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path != "/" {
@@ -19,7 +25,9 @@ func home(w http.ResponseWriter, r *http.Request) {
 
 	PrintRequest(r)
 
-	target, _ := url.Parse("http://localhost:8081")
+	target, _ := url.Parse(backendServers[nextServerIndex])
+	nextServerIndex += 1
+	nextServerIndex %= len(backendServers)
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 

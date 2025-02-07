@@ -11,7 +11,13 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		myutils.StartBackendServer()
+		myutils.StartBackendServer(8082)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		myutils.StartBackendServer(8081)
 	}()
 
 	wg.Add(1)
