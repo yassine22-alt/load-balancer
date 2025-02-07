@@ -8,13 +8,62 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
+	"time"
 )
 
-var backendServers = []string{
-	"http://localhost:8081",
-	"http://localhost:8082",
+type Backend struct {
+	URL   string
+	Alive bool
+	mu    sync.RWMutex
+}
+
+var backendServers = []*Backend{
+	{URL: "http://localhost:8081", Alive: true},
+	{URL: "http://localhost:8082", Alive: true},
+	{URL: "http://localhost:8083", Alive: true},
 }
 var nextServerIndex = 0
+
+func healthChecker() {
+	for {
+		for _, server := range backendServers {
+			resp, err := http.Get(server.URL)
+			server.mu.Lock()
+			server.Alive = (err == nil && resp.StatusCode == http.StatusOK)
+			server.mu.Unlock()
+
+			if resp != nil {
+				resp.Body.Close()
+			}
+
+		}
+		time.Sleep(10 * time.Second)
+	}
+}
+
+func getNextHealthyBackend() *Backend {
+	for i, server := range backendServers {
+		server.mu.RLock()
+		if server.Alive && i >= nextServerIndex {
+			server.mu.RUnlock()
+			return server
+		}
+		server.mu.RUnlock()
+	}
+
+	for i, server := range backendServers {
+		server.mu.RLock()
+		if server.Alive {
+			server.mu.RUnlock()
+			nextServerIndex = i
+			return server
+		}
+		server.mu.RUnlock()
+	}
+
+	return nil
+}
 
 func home(w http.ResponseWriter, r *http.Request) {
 
@@ -25,7 +74,12 @@ func home(w http.ResponseWriter, r *http.Request) {
 
 	PrintRequest(r)
 
-	target, _ := url.Parse(backendServers[nextServerIndex])
+	server := getNextHealthyBackend()
+	if server == nil {
+		http.Error(w, "All servers are down", http.StatusServiceUnavailable)
+		return
+	}
+	target, _ := url.Parse(server.URL)
 	nextServerIndex += 1
 	nextServerIndex %= len(backendServers)
 
@@ -49,6 +103,8 @@ func home(w http.ResponseWriter, r *http.Request) {
 }
 
 func StartLoadBalancer() {
+
+	go healthChecker()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", home)

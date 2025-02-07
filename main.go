@@ -23,6 +23,12 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		myutils.StartBackendServer(8083)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		myutils.StartLoadBalancer()
 	}()
 
